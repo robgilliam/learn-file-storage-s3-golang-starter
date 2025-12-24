@@ -1,10 +1,11 @@
 package main
 
 import (
-	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -44,10 +45,10 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 
 	mediaType := fHdr.Header.Get("Content-Type")
 
-	data, err := io.ReadAll(f)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Data read failed", err)
-	}
+	// data, err := io.ReadAll(f)
+	// if err != nil {
+	// 	respondWithError(w, http.StatusInternalServerError, "Data read failed", err)
+	// }
 
 	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
@@ -58,9 +59,14 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusUnauthorized, "You do not have access to that video", err)
 	}
 
-	base64Encoded := base64.StdEncoding.EncodeToString(data)
-	base64DataUrl := fmt.Sprintf("data:%s;base64,%s", mediaType, base64Encoded)
-	video.ThumbnailURL = &base64DataUrl
+	path := cfg.getDataPath(videoID, mediaType)
+
+	fmt.Println(path)
+	fOut, err := os.Create(path)
+	_, err = io.Copy(fOut, f)
+
+	tnUrl := fmt.Sprintf("http://localhost:%s/%s", cfg.port, path)
+	video.ThumbnailURL = &tnUrl
 
 	cfg.db.UpdateVideo(video)
 	if err != nil {
@@ -68,4 +74,15 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 
 	respondWithJSON(w, http.StatusOK, video)
+}
+
+func (cfg *apiConfig) getDataPath(id uuid.UUID, contentType string) string {
+	extn := ""
+
+	switch contentType {
+	case "image/png":
+		extn = ".png"
+	}
+
+	return fmt.Sprintf("%s%s", filepath.Join(cfg.assetsRoot, id.String()), extn)
 }
