@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -45,11 +47,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 
 	mediaType := fHdr.Header.Get("Content-Type")
 
-	// data, err := io.ReadAll(f)
-	// if err != nil {
-	// 	respondWithError(w, http.StatusInternalServerError, "Data read failed", err)
-	// }
-
 	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, "Could not retrieve video data", err)
@@ -59,7 +56,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusUnauthorized, "You do not have access to that video", err)
 	}
 
-	path := cfg.getDataPath(videoID, mediaType)
+	path := cfg.getDataPath(mediaType)
 
 	fmt.Println(path)
 	fOut, err := os.Create(path)
@@ -76,7 +73,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	respondWithJSON(w, http.StatusOK, video)
 }
 
-func (cfg *apiConfig) getDataPath(id uuid.UUID, contentType string) string {
+func (cfg *apiConfig) getDataPath(contentType string) string {
 	extn := ""
 
 	switch contentType {
@@ -84,5 +81,11 @@ func (cfg *apiConfig) getDataPath(id uuid.UUID, contentType string) string {
 		extn = ".png"
 	}
 
-	return fmt.Sprintf("%s%s", filepath.Join(cfg.assetsRoot, id.String()), extn)
+	var buf = make([]byte, 32)
+	rand.Read(buf)
+	filename := base64.RawURLEncoding.EncodeToString((buf))
+
+	fmt.Println(filename)
+
+	return fmt.Sprintf("%s%s", filepath.Join(cfg.assetsRoot, filename), extn)
 }
