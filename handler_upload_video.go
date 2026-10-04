@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -12,12 +11,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"strings"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
-	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 	"github.com/google/uuid"
 )
 
@@ -124,18 +120,12 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	videoUrl := fmt.Sprintf("%s,%s", cfg.s3Bucket, videoKey)
+	videoUrl := fmt.Sprintf("https://%s/%s", cfg.s3CfDistribution, videoKey)
 	video.VideoURL = &videoUrl
 
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
-		return
-	}
-
-	video, err = cfg.dbVideoToSignedVideo(video)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Could not get presigned video URL", err)
 		return
 	}
 
@@ -192,36 +182,4 @@ func processVideoForFastStart(filePath string) (string, error) {
 	}
 
 	return outFilePath, nil
-}
-
-func generatePresignedUrl(s3client *s3.Client, bucket, key string, expireTime time.Duration) (string, error) {
-	fmt.Printf("Generating presigned URL for %s/%s: ", bucket, key)
-	presignClient := s3.NewPresignClient(s3client)
-
-	request, err := presignClient.PresignGetObject(context.TODO(), &s3.GetObjectInput{Bucket: &bucket, Key: &key}, s3.WithPresignExpires(expireTime))
-	if err != nil {
-		return "", err
-	}
-
-	fmt.Println(request.URL)
-	return request.URL, nil
-}
-
-func (cfg *apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video, error) {
-	if video.VideoURL == nil {
-		return video, nil
-	}
-
-	items := strings.Split(*video.VideoURL, ",")
-	bucket := items[0]
-	key := items[1]
-
-	newUrl, err := generatePresignedUrl(cfg.s3Client, bucket, key, 10*time.Minute)
-
-	if err != nil {
-		return video, err
-	}
-
-	video.VideoURL = &newUrl
-	return video, nil
 }
